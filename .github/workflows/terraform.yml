@@ -1,0 +1,99 @@
+name: Terraform
+
+# Plans on every pull request that touches Terraform or the Lambda source
+# (must pass, same as the `checks` job, before merge - see branch
+# protection). Applies automatically on merge to master. Never runs
+# terraform/bootstrap - that's a one-time, by-hand setup step (see
+# terraform/bootstrap/main.tf).
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'terraform/**'
+      - 'lambda_function.py'
+      - '!terraform/bootstrap/**'
+  push:
+    branches: [master]
+    paths:
+      - 'terraform/**'
+      - 'lambda_function.py'
+      - '!terraform/bootstrap/**'
+  workflow_dispatch: {}
+
+defaults:
+  run:
+    working-directory: terraform
+
+env:
+  TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+  TF_VAR_govee_api_key: ${{ secrets.GOVEE_API_KEY }}
+  TF_VAR_govee_device_filter: ${{ vars.GOVEE_DEVICE_FILTER }}
+  TF_VAR_latitude: ${{ vars.LATITUDE }}
+  TF_VAR_longitude: ${{ vars.LONGITUDE }}
+  TF_VAR_timezone: ${{ vars.TIMEZONE }}
+  TF_VAR_start_kelvin: ${{ vars.START_KELVIN || 4300 }}
+  TF_VAR_end_kelvin: ${{ vars.END_KELVIN || 2200 }}
+  TF_VAR_start_brightness: ${{ vars.START_BRIGHTNESS || 60 }}
+  TF_VAR_end_brightness: ${{ vars.END_BRIGHTNESS || 30 }}
+  TF_VAR_step_count: ${{ vars.STEP_COUNT || 6 }}
+  TF_VAR_plan_cron_utc: ${{ vars.PLAN_CRON_UTC }}
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    name: plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=govee-sunset-scene/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+
+      - name: Terraform plan
+        run: terraform plan -no-color -input=false
+
+  apply:
+    if: github.event_name != 'pull_request'
+    name: apply
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=govee-sunset-scene/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve -input=false

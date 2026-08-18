@@ -1,3 +1,13 @@
 .env
 __pycache__/
 *.pyc
+
+# Terraform
+terraform/.terraform/
+terraform/bootstrap/.terraform/
+terraform/.build/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+backend.hcl
+crash.log
