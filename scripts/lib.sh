@@ -2,13 +2,14 @@
 # Shared setup sourced by deploy-infra.sh and deploy-app.sh. Not meant to be
 # run directly.
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
 # Locally, config comes from .env. In CI, the same variables are injected
 # directly into the environment by the GitHub Actions workflow, so .env is
 # not required there.
 if [[ -f .env ]]; then
   set -a
+  # shellcheck disable=SC1091
   source .env
   set +a
 fi
@@ -20,6 +21,7 @@ FUNCTION_NAME="govee-sunset-scene"
 LAMBDA_ROLE_NAME="govee-scene-lambda-role"
 SCHEDULER_ROLE_NAME="govee-scene-scheduler-role"
 SCHEDULE_GROUP="${SCHEDULE_GROUP:-default}"
+# shellcheck disable=SC2034 # used by deploy-infra.sh after sourcing this file
 PLAN_SCHEDULE_NAME="govee-plan-tonight"
 
 REGION="$(aws configure get region 2>/dev/null || true)"
@@ -30,8 +32,11 @@ if [[ -z "$REGION" ]]; then
 fi
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+# shellcheck disable=SC2034 # used by deploy-infra.sh/deploy-app.sh after sourcing this file
 FUNCTION_ARN="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${FUNCTION_NAME}"
+# shellcheck disable=SC2034 # used by deploy-app.sh after sourcing this file
 LAMBDA_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${LAMBDA_ROLE_NAME}"
+# shellcheck disable=SC2034 # used by deploy-infra.sh/deploy-app.sh after sourcing this file
 SCHEDULER_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${SCHEDULER_ROLE_NAME}"
 
 require_vars() {
