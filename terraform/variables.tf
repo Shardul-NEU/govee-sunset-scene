@@ -38,7 +38,7 @@ variable "start_kelvin" {
 }
 
 variable "end_kelvin" {
-  description = "Color temperature at local midnight"
+  description = "Color temperature at 11pm local time, then holds until shutoff"
   type        = number
   default     = 2200
 }
@@ -49,14 +49,26 @@ variable "start_brightness" {
   default     = 60
 }
 
-variable "end_brightness" {
-  description = "Brightness percent (1-100) at local midnight"
+variable "evening_brightness" {
+  description = "Brightness percent (1-100) at 11pm local time"
   type        = number
   default     = 30
 }
 
+variable "end_brightness" {
+  description = "Brightness percent (1-100) just before the 1am shutoff"
+  type        = number
+  default     = 10
+}
+
+variable "fade_step_count" {
+  description = "Number of extra dimming points between 11pm and 1am"
+  type        = number
+  default     = 3
+}
+
 variable "step_count" {
-  description = "Number of points between sunset and midnight, including both ends"
+  description = "Number of points between sunset and 11pm, including both ends"
   type        = number
   default     = 6
 }
