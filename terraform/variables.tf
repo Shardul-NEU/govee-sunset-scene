@@ -15,6 +15,11 @@ variable "govee_device_filter" {
   default     = ""
 }
 
+variable "group_device_id" {
+  description = "Device id of the Govee app group (sku SameModeGroup) containing all controlled bulbs, used for the single sunset-on/1am-off power call. Find it by invoking the Lambda with {\"action\":\"list_devices\"}."
+  type        = string
+}
+
 variable "latitude" {
   description = "Decimal degrees latitude"
   type        = string

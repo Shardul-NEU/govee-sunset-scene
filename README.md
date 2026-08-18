@@ -11,7 +11,7 @@ volume of calls), and keeps your Govee API key on your own AWS account only.
 
 ## How it works
 
-- **One Lambda function** (`lambda_function.py`) with two actions:
+- **One Lambda function** (`lambda_function.py`) with three actions:
   - `plan` - runs once a day, well before sunset. Looks up today's real
     sunset time for your coordinates (via the free sunrise-sunset.org API),
     then creates a handful of one-time EventBridge Scheduler entries for
@@ -19,8 +19,16 @@ volume of calls), and keeps your Govee API key on your own AWS account only.
     down to a dim night-light level between 11pm and 1am, then 1am-off.
     Each one-time entry deletes itself right after it fires.
   - `run_step` - fired by each of those one-time entries. Calls Govee's own
-    cloud API directly to set color temperature (or turn bulbs off) on
-    every bulb your API key can see.
+    cloud API directly to set color temperature/brightness (or turn bulbs
+    off) on the individual bulbs. The very first (sunset-on) and last
+    (1am-off) steps flip power with a single call to your Govee app's
+    "Lights" group instead of one call per bulb - groups only support
+    on/off, not color/brightness, so every other step still talks to the 8
+    bulbs individually.
+  - `list_devices` - manual/ad-hoc action to dump every device (and, with
+    `{"verbose":true}`, its capabilities) your API key can see. Useful for
+    finding `sku:deviceId` pairs for `GOVEE_DEVICE_FILTER`, or your app
+    group's device id for `GROUP_DEVICE_ID`.
 - **EventBridge Scheduler** provides both the daily recurring trigger for
   `plan` and the disposable nightly triggers for `run_step`.
 - Two small IAM roles: one lets EventBridge Scheduler invoke your Lambda,
@@ -91,6 +99,9 @@ Edit `terraform.tfvars`:
 - `govee_device_filter` - leave blank to control all 8 bulbs. Only set this
   if you later add other Govee devices to the account you don't want this
   automation touching.
+- `group_device_id` - device id of the Govee app group containing all 8
+  bulbs (sku `SameModeGroup`). Deploy once, then invoke the Lambda with
+  `{"action":"list_devices"}` to find it, then set this and re-apply.
 
 `terraform.tfvars` and `backend.hcl` stay on your machine - they are
 gitignored. In CI, the same values come from GitHub Actions secrets/
@@ -141,6 +152,7 @@ Secrets (sensitive):
 Variables (not sensitive):
 - `AWS_REGION`
 - `TF_STATE_BUCKET`, `TF_LOCK_TABLE` - from the bootstrap output in step 3.
+- `GROUP_DEVICE_ID` - your Govee app group's device id (see step 4).
 - `LATITUDE`, `LONGITUDE`, `TIMEZONE`
 - `PLAN_CRON_UTC`
 - `GOVEE_DEVICE_FILTER`, `START_KELVIN`, `END_KELVIN`, `START_BRIGHTNESS`,

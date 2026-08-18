@@ -29,6 +29,7 @@ env:
   TF_VAR_aws_region: ${{ vars.AWS_REGION }}
   TF_VAR_govee_api_key: ${{ secrets.GOVEE_API_KEY }}
   TF_VAR_govee_device_filter: ${{ vars.GOVEE_DEVICE_FILTER }}
+  TF_VAR_group_device_id: ${{ vars.GROUP_DEVICE_ID }}
   TF_VAR_latitude: ${{ vars.LATITUDE }}
   TF_VAR_longitude: ${{ vars.LONGITUDE }}
   TF_VAR_timezone: ${{ vars.TIMEZONE }}
