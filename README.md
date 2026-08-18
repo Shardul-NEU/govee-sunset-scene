@@ -73,8 +73,44 @@ roles, Lambda functions, and EventBridge Scheduler schedules.
 ./deploy.sh
 ```
 
-This is safe to re-run any time you change `.env` - it updates the
-existing function and schedule in place rather than erroring.
+This runs the two deploy stages locally, in order (see below), and is safe
+to re-run any time you change `.env` - it updates existing resources in
+place rather than erroring.
+
+## CI/CD
+
+Deploys are split into two independent stages, each with its own script and
+GitHub Actions workflow:
+
+| Stage | Script | Workflow | Triggered by changes to |
+|---|---|---|---|
+| Infra (IAM roles, EventBridge schedule) | `scripts/deploy-infra.sh` | `.github/workflows/deploy-infra.yml` | `policies/**`, `scripts/deploy-infra.sh`, `scripts/lib.sh` |
+| App (Lambda code + config) | `scripts/deploy-app.sh` | `.github/workflows/deploy-app.yml` | `lambda_function.py`, `scripts/deploy-app.sh`, `scripts/lib.sh` |
+
+`.github/workflows/ci.yml` runs on every pull request (Python syntax check,
+IAM policy JSON validation, shellcheck) and must pass before merging.
+
+**`master` is protected** - no direct pushes; all changes go through a pull
+request, and the CI checks above must pass before merge.
+
+Both deploy workflows run automatically on merge to `master`, only when the
+relevant paths changed, using AWS credentials and config stored as GitHub
+Actions secrets/variables (Settings -> Secrets and variables -> Actions):
+
+Secrets (sensitive):
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - an AWS user/role with
+  permission to manage IAM roles, Lambda, and EventBridge Scheduler.
+- `GOVEE_API_KEY` - from step 1 above.
+
+Variables (not sensitive):
+- `AWS_REGION`
+- `LATITUDE`, `LONGITUDE`, `TIMEZONE`
+- `PLAN_CRON_UTC`
+- `GOVEE_DEVICE_FILTER`, `START_KELVIN`, `END_KELVIN`, `STEP_COUNT` (optional
+  - the scripts fall back to the same defaults as `.env.example`)
+
+You can also run either workflow manually from the Actions tab
+(`workflow_dispatch`) without changing any files.
 
 ## 5. Test before trusting it overnight
 
