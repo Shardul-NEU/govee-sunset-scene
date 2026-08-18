@@ -66,6 +66,32 @@ silently no-op (or error) on capabilities they don't have. `GOVEE_DEVICE_FILTER`
 filtering happens independently of this and only applies to the individual-bulb
 loop, not the group power call.
 
+### Devices in this Govee account
+
+From `{"action":"list_devices","verbose":true}` (device ids aren't secret,
+but re-run this if bulbs are ever added/removed/renamed — this list will
+drift):
+
+| Name | sku | device id | capabilities |
+|---|---|---|---|
+| Desk Side 1 | H6008 | `37:C5:98:17:3C:74:CD:62` | powerSwitch, brightness, colorRgb, colorTemperatureK, lightScene, diyScene |
+| Desk Side 2 | H6008 | `8C:C5:98:17:3C:74:79:A8` | powerSwitch, brightness, colorRgb, colorTemperatureK, lightScene, diyScene |
+| Bed Lamp 1 | H6008 | `76:18:98:17:3C:71:9C:32` | powerSwitch, brightness, colorRgb, colorTemperatureK, lightScene, diyScene |
+| Bed Lamp 2 | H6008 | `AF:6F:D0:C9:07:D6:51:90` | powerSwitch, brightness, colorRgb, colorTemperatureK, lightScene, diyScene |
+| Fan 1 | H6008 | `05:83:5C:E7:53:A7:3A:FC` | powerSwitch, brightness, colorRgb, colorTemperatureK, lightScene, diyScene |
+| Fan 2 | H6008 | `04:C7:5C:E7:53:AE:66:F2` | powerSwitch, brightness, colorRgb, colorTemperatureK, lightScene, diyScene |
+| Fan 3 | H6008 | `07:BE:5C:E7:53:92:DE:7E` | powerSwitch, brightness, colorRgb, colorTemperatureK, lightScene, diyScene |
+| Fan 4 | H6008 | `04:53:5C:E7:53:95:12:5E` | powerSwitch, brightness, colorRgb, colorTemperatureK, lightScene, diyScene |
+
+Govee app groups (`sku: SameModeGroup`) — power-only, see the section above:
+
+| Group | device id | Contains |
+|---|---|---|
+| Desk Side | `23198487` | Desk Side 1 + 2 |
+| Bed Lamp | `23198574` | Bed Lamp 1 + 2 |
+| Fan | `23521939` | Fan 1–4 |
+| Lights | `12739459` | All 8 bulbs — **this is `GROUP_DEVICE_ID`'s current value** |
+
 ### Terraform layout
 
 - `terraform/` — the real, single-stack config: both IAM roles, the Lambda (code *and* config together — Terraform owns the zip via `data.archive_file`, keyed off `lambda_function.py`'s hash), and the recurring `plan` schedule. There is no separate "deploy the code" step — any Lambda code change goes through `terraform apply` like everything else.
