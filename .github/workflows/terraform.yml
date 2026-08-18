@@ -35,8 +35,10 @@ env:
   TF_VAR_start_kelvin: ${{ vars.START_KELVIN || 4300 }}
   TF_VAR_end_kelvin: ${{ vars.END_KELVIN || 2200 }}
   TF_VAR_start_brightness: ${{ vars.START_BRIGHTNESS || 60 }}
-  TF_VAR_end_brightness: ${{ vars.END_BRIGHTNESS || 30 }}
+  TF_VAR_evening_brightness: ${{ vars.EVENING_BRIGHTNESS || 30 }}
+  TF_VAR_end_brightness: ${{ vars.END_BRIGHTNESS || 10 }}
   TF_VAR_step_count: ${{ vars.STEP_COUNT || 6 }}
+  TF_VAR_fade_step_count: ${{ vars.FADE_STEP_COUNT || 3 }}
   TF_VAR_plan_cron_utc: ${{ vars.PLAN_CRON_UTC }}
 
 jobs:

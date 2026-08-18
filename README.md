@@ -1,8 +1,10 @@
 # Govee sunset-to-bedtime lighting automation
 
 Runs your 8 Govee bulbs on a serverless AWS schedule: on at real local
-sunset in warm white, gradually warmer/more amber through the evening,
-holding deep amber from midnight, off at 1am. No always-on device, and it
+sunset in warm white and bright, gradually warmer/more amber and dimmer
+through the evening, reaching deep amber by 11pm, then continuing to dim
+further into a night-light glow before switching off at 1am. No always-on
+device, and it
 doesn't run through Claude at all once deployed - it's pure AWS, effectively
 free (well inside the Lambda/EventBridge/Scheduler free tiers for this
 volume of calls), and keeps your Govee API key on your own AWS account only.
@@ -13,8 +15,9 @@ volume of calls), and keeps your Govee API key on your own AWS account only.
   - `plan` - runs once a day, well before sunset. Looks up today's real
     sunset time for your coordinates (via the free sunrise-sunset.org API),
     then creates a handful of one-time EventBridge Scheduler entries for
-    tonight: sunset, a few warming steps, local midnight, and 1am-off. Each
-    one-time entry deletes itself right after it fires.
+    tonight: sunset, a few warming/dimming steps up to 11pm, a further fade
+    down to a dim night-light level between 11pm and 1am, then 1am-off.
+    Each one-time entry deletes itself right after it fires.
   - `run_step` - fired by each of those one-time entries. Calls Govee's own
     cloud API directly to set color temperature (or turn bulbs off) on
     every bulb your API key can see.
@@ -79,9 +82,12 @@ Edit `terraform.tfvars`:
   early afternoon local time.
 - `start_kelvin` / `end_kelvin` / `step_count` - tune the warmth curve if
   you want. Defaults: 4300K (warm white) at sunset down to 2200K (deep
-  amber/candlelight) at midnight, in 6 steps.
-- `start_brightness` / `end_brightness` - brightness percent (1-100) over
-  the same curve. Defaults: 60% at sunset down to 30% at midnight.
+  amber/candlelight) at 11pm, in 6 steps, then holds until shutoff.
+- `start_brightness` / `evening_brightness` / `end_brightness` - brightness
+  percent (1-100) curve. Defaults: 60% at sunset, dimming to 30% by 11pm,
+  then continuing to dim to 10% right before the 1am shutoff.
+- `fade_step_count` - number of extra dimming points between 11pm and 1am
+  for that final fade. Default: 3.
 - `govee_device_filter` - leave blank to control all 8 bulbs. Only set this
   if you later add other Govee devices to the account you don't want this
   automation touching.
@@ -138,8 +144,9 @@ Variables (not sensitive):
 - `LATITUDE`, `LONGITUDE`, `TIMEZONE`
 - `PLAN_CRON_UTC`
 - `GOVEE_DEVICE_FILTER`, `START_KELVIN`, `END_KELVIN`, `START_BRIGHTNESS`,
-  `END_BRIGHTNESS`, `STEP_COUNT` (optional - Terraform falls back to the
-  same defaults as `terraform.tfvars.example`)
+  `EVENING_BRIGHTNESS`, `END_BRIGHTNESS`, `STEP_COUNT`, `FADE_STEP_COUNT`
+  (optional - Terraform falls back to the same defaults as
+  `terraform.tfvars.example`)
 
 You can also run the `terraform` workflow manually from the Actions tab
 (`workflow_dispatch`) without changing any files.
@@ -180,18 +187,18 @@ aws logs tail /aws/lambda/govee-sunset-scene --follow
 
 ## Costs
 
-At roughly 1 `plan` call + 7 `run_step` calls per night (~30 Lambda
-invocations/month, each touching 8 bulbs with 2 API calls apiece), this is
-comfortably inside AWS's always-free Lambda and EventBridge Scheduler
-tiers. Expect $0/month.
+At roughly 1 `plan` call + 10 `run_step` calls per night (~330 Lambda
+invocations/month, each touching 8 bulbs with up to 3 API calls apiece),
+this is comfortably inside AWS's always-free Lambda and EventBridge
+Scheduler tiers. Expect $0/month.
 
 ## Adjusting later
 
 - Change the warmth curve: edit `start_kelvin` / `end_kelvin` / `step_count`
   in `terraform.tfvars` (or the matching GitHub variables for CI) and
   re-apply.
-- Change the brightness curve: edit `start_brightness` / `end_brightness`
-  the same way.
+- Change the brightness curve: edit `start_brightness` / `evening_brightness`
+  / `end_brightness` / `fade_step_count` the same way.
 - Pause it: easiest to toggle the `govee-plan-tonight` schedule off in the
   AWS Console (EventBridge -> Scheduler) rather than changing Terraform.
 - Remove it entirely: `terraform destroy` (from `terraform/`, with the same
