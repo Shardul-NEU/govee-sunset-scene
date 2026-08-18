@@ -1,18 +1,17 @@
 name: Terraform
 
-# Plans on every pull request that touches Terraform or the Lambda source
-# (must pass, same as the `checks` job, before merge - see branch
-# protection). Applies automatically on merge to master. Never runs
-# terraform/bootstrap - that's a one-time, by-hand setup step (see
-# terraform/bootstrap/main.tf).
+# `plan` is a required status check (branch protection), so it runs on
+# EVERY pull request regardless of what changed - it just reports "no
+# changes" when nothing Terraform-relevant is touched. Required checks that
+# only sometimes run leave GitHub unable to confirm they "passed" and block
+# merges outright, so this must not be path-filtered even though the actual
+# `apply` job below is. `apply` runs automatically on merge to master, only
+# when Terraform/Lambda files changed. Never runs terraform/bootstrap -
+# that's a one-time, by-hand setup step (see terraform/bootstrap/main.tf).
 
 on:
   pull_request:
     branches: [master]
-    paths:
-      - 'terraform/**'
-      - 'lambda_function.py'
-      - '!terraform/bootstrap/**'
   push:
     branches: [master]
     paths:
