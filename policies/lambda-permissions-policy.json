@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Logs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*:*:*"
+    },
+    {
+      "Sid": "ManageNightlySchedules",
+      "Effect": "Allow",
+      "Action": [
+        "scheduler:CreateSchedule",
+        "scheduler:DeleteSchedule",
+        "scheduler:GetSchedule",
+        "scheduler:ListSchedules"
+      ],
+      "Resource": "arn:aws:scheduler:*:*:schedule/*/govee-step-*"
+    },
+    {
+      "Sid": "PassRoleToScheduler",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "REPLACE_WITH_SCHEDULER_ROLE_ARN"
+    }
+  ]
+}
