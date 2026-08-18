@@ -1,0 +1,12 @@
+# Copy this file to backend.hcl and fill in the values from
+# `terraform -chdir=bootstrap output` (see terraform/bootstrap/README in the
+# top-level README.md). backend.hcl is gitignored since bucket/table names
+# are account-specific.
+#
+# Usage: terraform init -backend-config=backend.hcl
+
+bucket         = "REPLACE_WITH_YOUR_STATE_BUCKET_NAME"
+key            = "govee-sunset-scene/terraform.tfstate"
+region         = "REPLACE_WITH_YOUR_AWS_REGION"
+dynamodb_table = "govee-sunset-scene-tf-locks"
+encrypt        = true

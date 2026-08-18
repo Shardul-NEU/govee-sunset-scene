@@ -39,80 +39,109 @@ Google Maps -> right-click your house -> the top line of the context menu
 is your `lat, lng`. Or just say "what are the coordinates of <address>" to
 any maps app.
 
-## 3. Fill in your config
+## 3. One-time: create the Terraform state backend
+
+Terraform needs somewhere to keep its state file. `terraform/bootstrap` is a
+tiny, separate Terraform config that creates an S3 bucket + DynamoDB lock
+table for this - run it once, by hand, from your machine (never from CI):
 
 ```
-cp .env.example .env
+cd terraform/bootstrap
+terraform init
+terraform apply -var="state_bucket_name=<a globally unique bucket name>" -var="aws_region=<your region>"
+terraform output
 ```
 
-Edit `.env`:
-- `GOVEE_API_KEY` - from step 1
-- `LATITUDE` / `LONGITUDE` - from step 2
-- `TIMEZONE` - your IANA timezone, e.g. `America/Chicago`
-- `PLAN_CRON_UTC` - a UTC cron expression for a time that is *always*
+Then, back in `terraform/`:
+
+```
+cd ..
+cp backend.hcl.example backend.hcl
+```
+
+Edit `backend.hcl` with the bucket name/region from the output above.
+
+## 4. Fill in your config
+
+```
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars`:
+- `aws_region`
+- `govee_api_key` - from step 1
+- `latitude` / `longitude` - from step 2
+- `timezone` - your IANA timezone, e.g. `America/Chicago`
+- `plan_cron_utc` - a UTC cron expression for a time that is *always*
   before your earliest sunset of the year (winter). For US timezones, the
   default `cron(0 18 * * ? *)` (18:00 UTC = 12-1pm local depending on
   season/DST) is safe. If you're elsewhere, pick a UTC hour that maps to
   early afternoon local time.
-- `START_KELVIN` / `END_KELVIN` / `STEP_COUNT` - tune the warmth curve if
+- `start_kelvin` / `end_kelvin` / `step_count` - tune the warmth curve if
   you want. Defaults: 4300K (warm white) at sunset down to 2200K (deep
   amber/candlelight) at midnight, in 6 steps.
-- `GOVEE_DEVICE_FILTER` - leave blank to control all 8 bulbs. Only set this
+- `govee_device_filter` - leave blank to control all 8 bulbs. Only set this
   if you later add other Govee devices to the account you don't want this
   automation touching.
 
-`.env` stays on your machine - `deploy.sh` reads it locally to configure
-the Lambda's environment variables in AWS. It is not sent anywhere else.
+`terraform.tfvars` and `backend.hcl` stay on your machine - they are
+gitignored. In CI, the same values come from GitHub Actions secrets/
+variables instead (see CI/CD below).
 
-## 4. Deploy
+## 5. Deploy
 
-Requires the AWS CLI v2, logged in with a user/role that can create IAM
-roles, Lambda functions, and EventBridge Scheduler schedules.
+Requires Terraform >= 1.5 and the AWS CLI v2, logged in with a user/role
+that can create IAM roles, Lambda functions, and EventBridge Scheduler
+schedules.
 
 ```
-./deploy.sh
+cd terraform
+terraform init -backend-config=backend.hcl
+terraform plan
+terraform apply
 ```
 
-This runs the two deploy stages locally, in order (see below), and is safe
-to re-run any time you change `.env` - it updates existing resources in
-place rather than erroring.
+Safe to re-run any time you change `terraform.tfvars` or `lambda_function.py`
+- Terraform diffs against the real AWS state and only changes what's
+different.
 
 ## CI/CD
 
-Deploys are split into two independent stages, each with its own script and
-GitHub Actions workflow:
+Terraform is the single source of truth for the whole stack - IAM roles,
+the Lambda function (code + config), and the EventBridge schedule. Two
+GitHub Actions workflows drive it:
 
-| Stage | Script | Workflow | Triggered by changes to |
-|---|---|---|---|
-| Infra (IAM roles, EventBridge schedule) | `scripts/deploy-infra.sh` | `.github/workflows/deploy-infra.yml` | `policies/**`, `scripts/deploy-infra.sh`, `scripts/lib.sh` |
-| App (Lambda code + config) | `scripts/deploy-app.sh` | `.github/workflows/deploy-app.yml` | `lambda_function.py`, `scripts/deploy-app.sh`, `scripts/lib.sh` |
+- `.github/workflows/ci.yml` - on every pull request: Python syntax check,
+  `terraform fmt -check`, `terraform validate`.
+- `.github/workflows/terraform.yml` - `terraform plan` on every pull request
+  that touches `terraform/**` or `lambda_function.py`; `terraform apply
+  -auto-approve` automatically on merge to `master`. Never touches
+  `terraform/bootstrap` (that's the one-time by-hand step above).
 
-`.github/workflows/ci.yml` runs on every pull request (Python syntax check,
-IAM policy JSON validation, shellcheck) and must pass before merging.
+Both workflow's checks must pass before a PR can merge - **`master` is
+protected**: no direct pushes, all changes go through a pull request.
 
-**`master` is protected** - no direct pushes; all changes go through a pull
-request, and the CI checks above must pass before merge.
-
-Both deploy workflows run automatically on merge to `master`, only when the
-relevant paths changed, using AWS credentials and config stored as GitHub
+The `terraform` workflow needs AWS credentials and your config as GitHub
 Actions secrets/variables (Settings -> Secrets and variables -> Actions):
 
 Secrets (sensitive):
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` - an AWS user/role with
-  permission to manage IAM roles, Lambda, and EventBridge Scheduler.
+  permission to manage IAM roles, Lambda, EventBridge Scheduler, and to
+  read/write the state bucket + lock table.
 - `GOVEE_API_KEY` - from step 1 above.
 
 Variables (not sensitive):
 - `AWS_REGION`
+- `TF_STATE_BUCKET`, `TF_LOCK_TABLE` - from the bootstrap output in step 3.
 - `LATITUDE`, `LONGITUDE`, `TIMEZONE`
 - `PLAN_CRON_UTC`
 - `GOVEE_DEVICE_FILTER`, `START_KELVIN`, `END_KELVIN`, `STEP_COUNT` (optional
-  - the scripts fall back to the same defaults as `.env.example`)
+  - Terraform falls back to the same defaults as `terraform.tfvars.example`)
 
-You can also run either workflow manually from the Actions tab
+You can also run the `terraform` workflow manually from the Actions tab
 (`workflow_dispatch`) without changing any files.
 
-## 5. Test before trusting it overnight
+## 6. Test before trusting it overnight
 
 ```
 aws lambda invoke --function-name govee-sunset-scene \
@@ -155,14 +184,16 @@ tiers. Expect $0/month.
 
 ## Adjusting later
 
-- Change the warmth curve: edit `START_KELVIN` / `END_KELVIN` / `STEP_COUNT`
-  in `.env` and re-run `./deploy.sh`.
-- Pause it: disable the schedule -
-  `aws scheduler update-schedule --name govee-plan-tonight --group-name default --state DISABLED --schedule-expression "$PLAN_CRON_UTC" --schedule-expression-timezone UTC --flexible-time-window '{"Mode":"OFF"}' --target '...'`
-  (easiest to just toggle it off in the AWS Console instead).
-- Remove it entirely: delete the `govee-sunset-scene` Lambda, the
-  `govee-plan-tonight` schedule, and the two IAM roles
-  (`govee-scene-lambda-role`, `govee-scene-scheduler-role`).
+- Change the warmth curve: edit `start_kelvin` / `end_kelvin` / `step_count`
+  in `terraform.tfvars` (or the matching GitHub variables for CI) and
+  re-apply.
+- Pause it: easiest to toggle the `govee-plan-tonight` schedule off in the
+  AWS Console (EventBridge -> Scheduler) rather than changing Terraform.
+- Remove it entirely: `terraform destroy` (from `terraform/`, with the same
+  backend/tfvars). This deletes the Lambda, the `govee-plan-tonight`
+  schedule, and both IAM roles. It does not touch the state bucket/lock
+  table created by `terraform/bootstrap` - destroy those separately if you
+  want them gone too.
 
 ## Notes / known limitations
 

@@ -1,0 +1,36 @@
+# Copy this file to terraform.tfvars and fill in your own values.
+# terraform.tfvars is gitignored - it's only read locally by `terraform apply`.
+# In CI, the same values come from GitHub Actions secrets/variables instead
+# (see README.md).
+
+aws_region = ""
+
+# Govee Home app -> profile icon -> Settings -> About Us -> Apply for API Key
+govee_api_key = ""
+
+# Optional: restrict which bulbs get controlled, as comma-separated sku:deviceId
+# pairs. Leave blank to control every device the API key can see.
+govee_device_filter = ""
+
+# Decimal degrees. Get yours from Google Maps: right-click your house -> the
+# top entry in the context menu is "lat, lng".
+latitude  = ""
+longitude = ""
+
+# IANA timezone name, e.g. America/Chicago, America/New_York, America/Denver
+timezone = "America/Chicago"
+
+# Color temperature range for the sunset->midnight transition, in Kelvin.
+# Lower = warmer/more orange. 4300 ~ warm white, 2200 ~ deep amber/candlelight.
+start_kelvin = 4300
+end_kelvin   = 2200
+
+# How many points to hit between sunset and local midnight (including both
+# ends). 6 means: sunset, then 4 evenly-spaced steps, then midnight.
+step_count = 6
+
+# When the daily "plan tonight's schedule" job runs, as a UTC cron
+# expression. This MUST run before your earliest possible sunset of the
+# year. For US Central time, cron(0 18 * * ? *) (18:00 UTC, 12-1pm local
+# depending on DST) is safe. Adjust for your timezone.
+plan_cron_utc = "cron(0 18 * * ? *)"

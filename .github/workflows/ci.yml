@@ -20,14 +20,21 @@ jobs:
       - name: Python syntax check
         run: python -m py_compile lambda_function.py
 
-      - name: Validate IAM policy JSON
-        run: |
-          for f in policies/*.json; do
-            echo "Validating $f"
-            python -m json.tool "$f" > /dev/null
-          done
-
-      - name: Shellcheck deploy scripts
-        uses: ludeeus/action-shellcheck@master
+      - uses: hashicorp/setup-terraform@v3
         with:
-          scandir: '.'
+          terraform_wrapper: false
+
+      - name: Terraform fmt check
+        run: terraform fmt -check -recursive terraform
+
+      - name: Terraform validate (main config)
+        working-directory: terraform
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: Terraform validate (bootstrap)
+        working-directory: terraform/bootstrap
+        run: |
+          terraform init -backend=false
+          terraform validate

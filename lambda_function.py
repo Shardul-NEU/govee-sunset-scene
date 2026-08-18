@@ -25,8 +25,8 @@ Environment variables (set these on the Lambda, never hard-code secrets here):
   LONGITUDE       (required) - decimal degrees, e.g. "-97.7431"
   TIMEZONE        (required) - IANA tz name, e.g. "America/Chicago"
   SCHEDULER_ROLE_ARN   (required) - IAM role EventBridge Scheduler assumes
-                                     to invoke this Lambda (see deploy.sh)
-  FUNCTION_ARN         (required) - this Lambda's own ARN (see deploy.sh)
+                                     to invoke this Lambda (see terraform/)
+  FUNCTION_ARN         (required) - this Lambda's own ARN (see terraform/)
   DEVICE_FILTER   (optional) - comma-separated "sku:deviceId" pairs to
                                 limit which bulbs are controlled. Leave
                                 unset to control every device the API key
