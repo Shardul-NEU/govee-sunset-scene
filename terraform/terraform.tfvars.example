@@ -12,6 +12,12 @@ govee_api_key = ""
 # pairs. Leave blank to control every device the API key can see.
 govee_device_filter = ""
 
+# Device id of your Govee app group (sku "SameModeGroup") containing all
+# controlled bulbs - used for a single power on/off call at sunset and 1am
+# instead of one call per bulb. Find it by invoking the Lambda with
+# {"action":"list_devices"} and looking for the SameModeGroup entry.
+group_device_id = ""
+
 # Decimal degrees. Get yours from Google Maps: right-click your house -> the
 # top entry in the context menu is "lat, lng".
 latitude  = ""

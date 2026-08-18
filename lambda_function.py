@@ -1,7 +1,8 @@
 """
 Govee sunset-to-bedtime lighting automation.
 
-One Lambda, two "actions", both driven by EventBridge Scheduler:
+One Lambda, three "actions". "plan" and "run_step" are driven by
+EventBridge Scheduler; "list_devices" is for manual/ad-hoc invocation:
 
   action = "plan"      -> runs once a day (recurring schedule you create at
                            deploy time). Looks up TODAY's real sunset time
@@ -20,6 +21,10 @@ One Lambda, two "actions", both driven by EventBridge Scheduler:
                            off) on every bulb on your account (or a filtered
                            subset -- see DEVICE_FILTER below).
 
+  action = "list_devices" -> returns sku/device id/name for every bulb the
+                           API key can see. Handy for figuring out
+                           GOVEE_DEVICE_FILTER pairs.
+
 Environment variables (set these on the Lambda, never hard-code secrets here):
   GOVEE_API_KEY   (required) - your personal Govee Developer API key
   LATITUDE        (required) - decimal degrees, e.g. "30.2672"
@@ -28,6 +33,11 @@ Environment variables (set these on the Lambda, never hard-code secrets here):
   SCHEDULER_ROLE_ARN   (required) - IAM role EventBridge Scheduler assumes
                                      to invoke this Lambda (see terraform/)
   FUNCTION_ARN         (required) - this Lambda's own ARN (see terraform/)
+  GROUP_DEVICE_ID (required) - device id of the Govee app "group" (sku
+                                SameModeGroup) containing all controlled
+                                bulbs. Used for the single on/off call at
+                                sunset and 1am instead of one call per bulb.
+                                Find it with action=list_devices.
   DEVICE_FILTER   (optional) - comma-separated "sku:deviceId" pairs to
                                 limit which bulbs are controlled. Leave
                                 unset to control every device the API key
@@ -58,8 +68,13 @@ import boto3
 
 GOVEE_BASE = "https://openapi.api.govee.com"
 SUNSET_API = "https://api.sunrise-sunset.org/json"
+GROUP_SKU = "SameModeGroup"  # Govee's fixed sku for app-defined device groups
 
 scheduler = boto3.client("scheduler")
+
+
+def _group_device_id():
+    return os.environ["GROUP_DEVICE_ID"]
 
 
 # --------------------------------------------------------------------------
@@ -106,14 +121,23 @@ def plan_tonight(event, context):
     steps = []
 
     # Main ramp: sunset -> 11pm. Warms the color temp and dims brightness
-    # from start_b down to evening_b.
+    # from start_b down to evening_b. The very first step is the only one
+    # that flips power from off to on, so it's the only one that needs to
+    # touch power at all - it does so with one call to the "Lights" group
+    # instead of one call per bulb. Every other "on" step only adjusts
+    # color/brightness on the individual bulbs (power_mode="skip"), since
+    # groups don't support those capabilities.
     span = (eleven_pm_local - sunset_local) / max(step_count - 1, 1)
     for i in range(step_count):
         when = sunset_local + span * i
         frac = i / max(step_count - 1, 1)
         kelvin = round(start_k + (end_k - start_k) * frac)
         brightness = round(start_b + (evening_b - start_b) * frac)
-        steps.append((when, {"action": "run_step", "power": "on", "colorTemp": kelvin, "brightness": brightness}))
+        power_mode = "group" if i == 0 else "skip"
+        steps.append((when, {
+            "action": "run_step", "power": "on", "colorTemp": kelvin,
+            "brightness": brightness, "power_mode": power_mode,
+        }))
 
     # Fade: 11pm -> just before 1am. Color temp holds at end_k; brightness
     # keeps dimming from evening_b down to end_b, right up to shutoff.
@@ -123,10 +147,13 @@ def plan_tonight(event, context):
         when = eleven_pm_local + fade_span * i
         frac = i / fade_step_count
         brightness = round(evening_b + (end_b - evening_b) * frac)
-        steps.append((when, {"action": "run_step", "power": "on", "colorTemp": end_k, "brightness": brightness}))
+        steps.append((when, {
+            "action": "run_step", "power": "on", "colorTemp": end_k,
+            "brightness": brightness, "power_mode": "skip",
+        }))
 
-    # Off at 1am.
-    steps.append((one_am_local, {"action": "run_step", "power": "off"}))
+    # Off at 1am - one call to the "Lights" group instead of one per bulb.
+    steps.append((one_am_local, {"action": "run_step", "power": "off", "power_mode": "group"}))
 
     # Clean up any leftover schedules from a previous run today (idempotency).
     _delete_existing_step_schedules(group)
@@ -189,26 +216,49 @@ def run_step(event, context):
     power = event.get("power", "on")
     color_temp = event.get("colorTemp")
     brightness = event.get("brightness")
+    # "group"      - flip power via the Lights group (one call) instead of
+    #                one call per bulb. Used only on the sunset-on and
+    #                1am-off steps, where every bulb's power actually changes.
+    # "skip"       - don't touch power at all (bulbs are already on/off from
+    #                the group call); just adjust color/brightness per bulb.
+    # "individual" - original per-bulb power behavior (default/fallback).
+    power_mode = event.get("power_mode", "individual")
     device_filter = _parse_device_filter(os.environ.get("DEVICE_FILTER", ""))
 
-    devices = _list_devices(api_key)
     results = []
-    for d in devices:
+
+    if power_mode == "group":
+        results.append(_set_power(api_key, GROUP_SKU, _group_device_id(), power == "on"))
+        time.sleep(0.2)
+
+    if power == "off":
+        if power_mode == "individual":
+            for d in _list_devices(api_key):
+                sku, device_id = d["sku"], d["device"]
+                if sku == GROUP_SKU or (device_filter and (sku, device_id) not in device_filter):
+                    continue
+                results.append(_set_power(api_key, sku, device_id, False))
+                time.sleep(0.2)
+        return {"power": power, "colorTemp": color_temp, "brightness": brightness, "devices_touched": len(results)}
+
+    for d in _list_devices(api_key):
         sku, device_id = d["sku"], d["device"]
-        if device_filter and (sku, device_id) not in device_filter:
+        if sku == GROUP_SKU or (device_filter and (sku, device_id) not in device_filter):
             continue
 
         caps = {c["instance"]: c for c in d.get("capabilities", [])}
-        results.append(_set_power(api_key, sku, device_id, power == "on"))
-        time.sleep(0.2)
 
-        if power == "on" and color_temp is not None and "colorTemperatureK" in caps:
+        if power_mode == "individual":
+            results.append(_set_power(api_key, sku, device_id, True))
+            time.sleep(0.2)
+
+        if color_temp is not None and "colorTemperatureK" in caps:
             rng = caps["colorTemperatureK"].get("parameters", {}).get("range", {})
             clamped = max(rng.get("min", 2000), min(rng.get("max", 9000), color_temp))
             results.append(_set_color_temp(api_key, sku, device_id, clamped))
             time.sleep(0.2)
 
-        if power == "on" and brightness is not None and "brightness" in caps:
+        if brightness is not None and "brightness" in caps:
             rng = caps["brightness"].get("parameters", {}).get("range", {})
             clamped = max(rng.get("min", 1), min(rng.get("max", 100), brightness))
             results.append(_set_brightness(api_key, sku, device_id, clamped))
@@ -278,6 +328,23 @@ def _set_brightness(api_key, sku, device_id, percent):
 
 
 # --------------------------------------------------------------------------
+# action = "list_devices": dump sku/device id/name for every bulb the API
+# key can see, e.g. to figure out GOVEE_DEVICE_FILTER pairs.
+# --------------------------------------------------------------------------
+def list_devices_action(event, context):
+    api_key = os.environ["GOVEE_API_KEY"]
+    devices = _list_devices(api_key)
+    verbose = event.get("verbose", False)
+    result = []
+    for d in devices:
+        entry = {"deviceName": d.get("deviceName"), "sku": d["sku"], "device": d["device"]}
+        if verbose:
+            entry["capabilities"] = [c.get("instance") for c in d.get("capabilities", [])]
+        result.append(entry)
+    return {"count": len(devices), "devices": result}
+
+
+# --------------------------------------------------------------------------
 # Entry point
 # --------------------------------------------------------------------------
 def handler(event, context):
@@ -287,4 +354,6 @@ def handler(event, context):
         return plan_tonight(event, context)
     if action == "run_step":
         return run_step(event, context)
-    raise ValueError(f"Unknown action: {action!r} (expected 'plan' or 'run_step')")
+    if action == "list_devices":
+        return list_devices_action(event, context)
+    raise ValueError(f"Unknown action: {action!r} (expected 'plan', 'run_step', or 'list_devices')")
