@@ -33,6 +33,8 @@ Environment variables (set these on the Lambda, never hard-code secrets here):
                                 can see.
   START_KELVIN    (optional, default 4300) - color temp at sunset
   END_KELVIN      (optional, default 2200)  - color temp at local midnight
+  START_BRIGHTNESS (optional, default 60) - brightness % at sunset
+  END_BRIGHTNESS   (optional, default 30) - brightness % at local midnight
   STEP_COUNT      (optional, default 6) - number of points between sunset
                                 and midnight (inclusive of both ends)
   SCHEDULE_GROUP  (optional, default "default") - EventBridge Scheduler group
@@ -79,6 +81,8 @@ def plan_tonight(event, context):
     tz = ZoneInfo(os.environ["TIMEZONE"])
     start_k = int(os.environ.get("START_KELVIN", "4300"))
     end_k = int(os.environ.get("END_KELVIN", "2200"))
+    start_b = int(os.environ.get("START_BRIGHTNESS", "60"))
+    end_b = int(os.environ.get("END_BRIGHTNESS", "30"))
     step_count = int(os.environ.get("STEP_COUNT", "6"))
     group = os.environ.get("SCHEDULE_GROUP", "default")
     function_arn = os.environ["FUNCTION_ARN"]
@@ -99,7 +103,8 @@ def plan_tonight(event, context):
         when = sunset_local + span * i
         frac = i / max(step_count - 1, 1)
         kelvin = round(start_k + (end_k - start_k) * frac)
-        steps.append((when, {"action": "run_step", "power": "on", "colorTemp": kelvin}))
+        brightness = round(start_b + (end_b - start_b) * frac)
+        steps.append((when, {"action": "run_step", "power": "on", "colorTemp": kelvin, "brightness": brightness}))
 
     # Off at 1am.
     steps.append((one_am_local, {"action": "run_step", "power": "off"}))
@@ -164,6 +169,7 @@ def run_step(event, context):
     api_key = os.environ["GOVEE_API_KEY"]
     power = event.get("power", "on")
     color_temp = event.get("colorTemp")
+    brightness = event.get("brightness")
     device_filter = _parse_device_filter(os.environ.get("DEVICE_FILTER", ""))
 
     devices = _list_devices(api_key)
@@ -183,7 +189,13 @@ def run_step(event, context):
             results.append(_set_color_temp(api_key, sku, device_id, clamped))
             time.sleep(0.2)
 
-    return {"power": power, "colorTemp": color_temp, "devices_touched": len(results)}
+        if power == "on" and brightness is not None and "brightness" in caps:
+            rng = caps["brightness"].get("parameters", {}).get("range", {})
+            clamped = max(rng.get("min", 1), min(rng.get("max", 100), brightness))
+            results.append(_set_brightness(api_key, sku, device_id, clamped))
+            time.sleep(0.2)
+
+    return {"power": power, "colorTemp": color_temp, "brightness": brightness, "devices_touched": len(results)}
 
 
 def _parse_device_filter(raw):
@@ -236,6 +248,13 @@ def _set_color_temp(api_key, sku, device_id, kelvin):
     return _control(
         api_key, sku, device_id,
         {"type": "devices.capabilities.color_setting", "instance": "colorTemperatureK", "value": kelvin},
+    )
+
+
+def _set_brightness(api_key, sku, device_id, percent):
+    return _control(
+        api_key, sku, device_id,
+        {"type": "devices.capabilities.range", "instance": "brightness", "value": percent},
     )
 
 

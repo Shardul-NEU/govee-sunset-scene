@@ -43,6 +43,18 @@ variable "end_kelvin" {
   default     = 2200
 }
 
+variable "start_brightness" {
+  description = "Brightness percent (1-100) at sunset"
+  type        = number
+  default     = 60
+}
+
+variable "end_brightness" {
+  description = "Brightness percent (1-100) at local midnight"
+  type        = number
+  default     = 30
+}
+
 variable "step_count" {
   description = "Number of points between sunset and midnight, including both ends"
   type        = number

@@ -76,9 +76,19 @@ data "aws_iam_policy_document" "lambda_permissions" {
       "scheduler:CreateSchedule",
       "scheduler:DeleteSchedule",
       "scheduler:GetSchedule",
-      "scheduler:ListSchedules",
     ]
     resources = ["arn:aws:scheduler:*:*:schedule/*/govee-step-*"]
+  }
+
+  statement {
+    # ListSchedules operates over the whole group, not a single named
+    # schedule, so AWS authorizes it against the group-wildcard resource
+    # (schedule/*/*) regardless of NamePrefix - it can't be scoped down to
+    # govee-step-* the way the other actions above can.
+    sid       = "ListNightlySchedules"
+    effect    = "Allow"
+    actions   = ["scheduler:ListSchedules"]
+    resources = ["arn:aws:scheduler:*:*:schedule/*/*"]
   }
 
   statement {
@@ -122,6 +132,8 @@ resource "aws_lambda_function" "govee_sunset_scene" {
       TIMEZONE            = var.timezone
       START_KELVIN        = tostring(var.start_kelvin)
       END_KELVIN          = tostring(var.end_kelvin)
+      START_BRIGHTNESS    = tostring(var.start_brightness)
+      END_BRIGHTNESS      = tostring(var.end_brightness)
       STEP_COUNT          = tostring(var.step_count)
       SCHEDULE_GROUP      = var.schedule_group
       SCHEDULER_ROLE_ARN  = aws_iam_role.scheduler.arn

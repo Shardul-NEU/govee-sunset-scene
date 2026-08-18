@@ -34,6 +34,8 @@ env:
   TF_VAR_timezone: ${{ vars.TIMEZONE }}
   TF_VAR_start_kelvin: ${{ vars.START_KELVIN }}
   TF_VAR_end_kelvin: ${{ vars.END_KELVIN }}
+  TF_VAR_start_brightness: ${{ vars.START_BRIGHTNESS }}
+  TF_VAR_end_brightness: ${{ vars.END_BRIGHTNESS }}
   TF_VAR_step_count: ${{ vars.STEP_COUNT }}
   TF_VAR_plan_cron_utc: ${{ vars.PLAN_CRON_UTC }}
 

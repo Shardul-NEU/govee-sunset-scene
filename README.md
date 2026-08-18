@@ -80,6 +80,8 @@ Edit `terraform.tfvars`:
 - `start_kelvin` / `end_kelvin` / `step_count` - tune the warmth curve if
   you want. Defaults: 4300K (warm white) at sunset down to 2200K (deep
   amber/candlelight) at midnight, in 6 steps.
+- `start_brightness` / `end_brightness` - brightness percent (1-100) over
+  the same curve. Defaults: 60% at sunset down to 30% at midnight.
 - `govee_device_filter` - leave blank to control all 8 bulbs. Only set this
   if you later add other Govee devices to the account you don't want this
   automation touching.
@@ -135,8 +137,9 @@ Variables (not sensitive):
 - `TF_STATE_BUCKET`, `TF_LOCK_TABLE` - from the bootstrap output in step 3.
 - `LATITUDE`, `LONGITUDE`, `TIMEZONE`
 - `PLAN_CRON_UTC`
-- `GOVEE_DEVICE_FILTER`, `START_KELVIN`, `END_KELVIN`, `STEP_COUNT` (optional
-  - Terraform falls back to the same defaults as `terraform.tfvars.example`)
+- `GOVEE_DEVICE_FILTER`, `START_KELVIN`, `END_KELVIN`, `START_BRIGHTNESS`,
+  `END_BRIGHTNESS`, `STEP_COUNT` (optional - Terraform falls back to the
+  same defaults as `terraform.tfvars.example`)
 
 You can also run the `terraform` workflow manually from the Actions tab
 (`workflow_dispatch`) without changing any files.
@@ -146,11 +149,11 @@ You can also run the `terraform` workflow manually from the Actions tab
 ```
 aws lambda invoke --function-name govee-sunset-scene \
   --cli-binary-format raw-in-base64-out \
-  --payload '{"action":"run_step","power":"on","colorTemp":3000}' \
+  --payload '{"action":"run_step","power":"on","colorTemp":3000,"brightness":50}' \
   /tmp/out.json && cat /tmp/out.json
 ```
 
-Your bulbs should immediately jump to ~3000K. Then try:
+Your bulbs should immediately jump to ~3000K at 50% brightness. Then try:
 
 ```
 aws lambda invoke --function-name govee-sunset-scene \
@@ -187,6 +190,8 @@ tiers. Expect $0/month.
 - Change the warmth curve: edit `start_kelvin` / `end_kelvin` / `step_count`
   in `terraform.tfvars` (or the matching GitHub variables for CI) and
   re-apply.
+- Change the brightness curve: edit `start_brightness` / `end_brightness`
+  the same way.
 - Pause it: easiest to toggle the `govee-plan-tonight` schedule off in the
   AWS Console (EventBridge -> Scheduler) rather than changing Terraform.
 - Remove it entirely: `terraform destroy` (from `terraform/`, with the same
@@ -201,10 +206,8 @@ tiers. Expect $0/month.
   ever unreachable when `plan` runs, the code falls back to a fixed
   7:30pm-local sunset for that night rather than skipping the automation
   entirely (see `_get_sunset_utc` in `lambda_function.py`).
-- Brightness is left untouched - only color temperature changes. If you
-  also want brightness to dim toward midnight, say so and I'll extend the
-  script; it's a small addition.
-- If a bulb model doesn't support Kelvin color temperature (rare for Govee
-  color bulbs, but some strip-only SKUs use RGB instead), that bulb is
-  still turned on/off correctly but its color step is skipped - check
-  CloudWatch logs if a specific bulb doesn't seem to respond.
+- If a bulb model doesn't support Kelvin color temperature or brightness
+  (rare for Govee color bulbs, but some strip-only SKUs use RGB instead),
+  that bulb is still turned on/off correctly but the unsupported step is
+  skipped - check CloudWatch logs if a specific bulb doesn't seem to
+  respond.

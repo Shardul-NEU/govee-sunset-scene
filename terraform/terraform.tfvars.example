@@ -25,6 +25,10 @@ timezone = "America/Chicago"
 start_kelvin = 4300
 end_kelvin   = 2200
 
+# Brightness range (percent, 1-100) for the same transition.
+start_brightness = 60
+end_brightness   = 30
+
 # How many points to hit between sunset and local midnight (including both
 # ends). 6 means: sunset, then 4 evenly-spaced steps, then midnight.
 step_count = 6
