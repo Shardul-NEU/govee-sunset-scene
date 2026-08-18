@@ -16,7 +16,7 @@
 # failing on "already exists".
 
 set -euo pipefail
-# shellcheck source=scripts/lib.sh
+# shellcheck disable=SC1091
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 require_vars GOVEE_API_KEY LATITUDE LONGITUDE TIMEZONE
