@@ -83,6 +83,9 @@ def _group_device_id():
 def _http_json(method, url, headers=None, body=None, timeout=10):
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
+    # Some APIs (e.g. sunrise-sunset.org) 403 the default Python-urllib/x.y
+    # User-Agent as bot traffic, so always send something browser-like.
+    req.add_header("User-Agent", "govee-sunset-scene/1.0 (+AWS Lambda)")
     for k, v in (headers or {}).items():
         req.add_header(k, v)
     if data is not None:
