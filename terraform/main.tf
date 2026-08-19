@@ -125,7 +125,7 @@ resource "aws_lambda_function" "govee_sunset_scene" {
 
   environment {
     variables = {
-      GOVEE_API_KEY       = var.govee_api_key
+      GOVEE_API_KEY       = trimprefix(var.govee_api_key, "﻿")
       GOVEE_DEVICE_FILTER = var.govee_device_filter
       GROUP_DEVICE_ID     = var.group_device_id
       LATITUDE            = var.latitude
