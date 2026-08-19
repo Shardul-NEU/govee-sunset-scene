@@ -113,7 +113,7 @@ def plan_tonight(event, context):
     function_arn = os.environ["FUNCTION_ARN"]
     scheduler_role_arn = os.environ["SCHEDULER_ROLE_ARN"]
 
-    sunset_utc = _get_sunset_utc(lat, lng)
+    sunset_utc = _get_sunset_utc(lat, lng, tz)
     sunset_local = sunset_utc.astimezone(tz)
 
     # 11pm same night, then 1am *after* tonight's sunset, in local time.
@@ -184,20 +184,23 @@ def plan_tonight(event, context):
     return {"sunset_local": sunset_local.isoformat(), "scheduled": created}
 
 
-def _get_sunset_utc(lat, lng):
+def _get_sunset_utc(lat, lng, tz):
+    # Pass today's date explicitly, in the configured local timezone rather
+    # than relying on the API's default (which is *its* server's UTC "today").
+    # Without this, any invocation after ~7pm CDT (i.e. past midnight UTC)
+    # would silently get tomorrow's sunset instead of tonight's.
+    today_local = datetime.now(tz).date()
     try:
         resp = _http_json(
             "GET",
-            f"{SUNSET_API}?lat={lat}&lng={lng}&formatted=0",
+            f"{SUNSET_API}?lat={lat}&lng={lng}&date={today_local.isoformat()}&formatted=0",
             timeout=8,
         )
         sunset_str = resp["results"]["sunset"]  # ISO8601 UTC, e.g. 2026-08-18T01:23:45+00:00
         return datetime.fromisoformat(sunset_str)
     except Exception as e:  # noqa: BLE001 - degrade gracefully rather than doing nothing tonight
         print(f"WARNING: sunset lookup failed ({e}); falling back to 7:30pm local")
-        tz = ZoneInfo(os.environ["TIMEZONE"])
-        now_local = datetime.now(tz)
-        fallback = now_local.replace(hour=19, minute=30, second=0, microsecond=0)
+        fallback = datetime.now(tz).replace(hour=19, minute=30, second=0, microsecond=0)
         return fallback.astimezone(timezone.utc)
 
 
