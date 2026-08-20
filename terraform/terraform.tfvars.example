@@ -46,7 +46,7 @@ end_brightness     = 10
 # final fade, and how many minutes before 1am the last of those points lands
 # (so it doesn't fire right on top of the 1am off step).
 fade_step_count         = 3
-fade_end_buffer_minutes = 10
+fade_end_buffer_minutes = 25
 
 # How many points to hit between sunset and local midnight (including both
 # ends). 6 means: sunset, then 4 evenly-spaced steps, then midnight.

@@ -98,7 +98,7 @@ Edit `terraform.tfvars`:
 - `fade_step_count` - number of extra warming/dimming points between 11pm
   and 1am for that final fade. Default: 3.
 - `fade_end_buffer_minutes` - minutes before 1am that the last fade point
-  lands, so it doesn't fire right on top of the 1am off step. Default: 10.
+  lands, so it doesn't fire right on top of the 1am off step. Default: 25.
 - `govee_device_filter` - leave blank to control all 8 bulbs. Only set this
   if you later add other Govee devices to the account you don't want this
   automation touching.

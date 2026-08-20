@@ -35,7 +35,7 @@ Three actions, dispatched from `handler()`:
 points — this split is deliberate, not incidental:
 
 1. **Main ramp, sunset → 11pm** (`STEP_COUNT` points, default 6): color temp interpolates `START_KELVIN` → `END_KELVIN`; brightness interpolates `START_BRIGHTNESS` → `EVENING_BRIGHTNESS`.
-2. **Fade, 11pm → ~1am** (`FADE_STEP_COUNT` points, default 3): color temp keeps interpolating `END_KELVIN` → `NIGHT_KELVIN` (deeper amber than phase 1 reaches); brightness keeps interpolating `EVENING_BRIGHTNESS` → `END_BRIGHTNESS`. The last fade point lands `FADE_END_BUFFER_MIN` minutes before 1am (default 10), not exactly at 1am, so it never collides in time with the off step.
+2. **Fade, 11pm → ~1am** (`FADE_STEP_COUNT` points, default 3): color temp keeps interpolating `END_KELVIN` → `NIGHT_KELVIN` (deeper amber than phase 1 reaches); brightness keeps interpolating `EVENING_BRIGHTNESS` → `END_BRIGHTNESS`. The last fade point lands `FADE_END_BUFFER_MIN` minutes before 1am (default 25), not exactly at 1am, so it never collides in time with the off step.
 3. **Off at 1am.**
 
 If you change the curve shape, both phases need to stay consistent — color

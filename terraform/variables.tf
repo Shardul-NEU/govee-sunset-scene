@@ -81,7 +81,7 @@ variable "fade_step_count" {
 variable "fade_end_buffer_minutes" {
   description = "Minutes before 1am that the last fade point lands, so it doesn't fire right on top of the 1am off step"
   type        = number
-  default     = 10
+  default     = 25
 }
 
 variable "step_count" {

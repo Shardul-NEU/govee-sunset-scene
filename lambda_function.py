@@ -59,7 +59,7 @@ Environment variables (set these on the Lambda, never hard-code secrets here):
                                 and 11pm (inclusive of both ends)
   FADE_STEP_COUNT (optional, default 3) - number of extra warming/dimming
                                 points between 11pm and 1am
-  FADE_END_BUFFER_MIN (optional, default 10) - minutes before 1am that the
+  FADE_END_BUFFER_MIN (optional, default 25) - minutes before 1am that the
                                 last fade point lands, so it doesn't fire
                                 right on top of the 1am off step
   SCHEDULE_GROUP  (optional, default "default") - EventBridge Scheduler group
@@ -120,7 +120,7 @@ def plan_tonight(event, context):
     end_b = int(os.environ.get("END_BRIGHTNESS", "10"))
     step_count = int(os.environ.get("STEP_COUNT", "6"))
     fade_step_count = int(os.environ.get("FADE_STEP_COUNT", "3"))
-    fade_end_buffer_min = int(os.environ.get("FADE_END_BUFFER_MIN", "10"))
+    fade_end_buffer_min = int(os.environ.get("FADE_END_BUFFER_MIN", "25"))
     group = os.environ.get("SCHEDULE_GROUP", "default")
     function_arn = os.environ["FUNCTION_ARN"]
     scheduler_role_arn = os.environ["SCHEDULER_ROLE_ARN"]

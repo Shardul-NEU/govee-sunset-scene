@@ -40,7 +40,7 @@ env:
   TF_VAR_end_brightness: ${{ vars.END_BRIGHTNESS || 10 }}
   TF_VAR_step_count: ${{ vars.STEP_COUNT || 6 }}
   TF_VAR_fade_step_count: ${{ vars.FADE_STEP_COUNT || 3 }}
-  TF_VAR_fade_end_buffer_minutes: ${{ vars.FADE_END_BUFFER_MINUTES || 10 }}
+  TF_VAR_fade_end_buffer_minutes: ${{ vars.FADE_END_BUFFER_MINUTES || 25 }}
   TF_VAR_plan_cron_utc: ${{ vars.PLAN_CRON_UTC }}
 
 jobs:
