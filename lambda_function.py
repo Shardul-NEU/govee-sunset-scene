@@ -10,8 +10,11 @@ EventBridge Scheduler; "list_devices" is for manual/ad-hoc invocation:
                            one-time EventBridge schedules for tonight:
                              sunset            -> warm white, on, bright
                              ... N steps ...   -> progressively warmer/dimmer
-                             local 11:00 PM    -> deepest amber, evening dim
-                             ... M steps ...   -> color holds, keeps dimming
+                             local 11:00 PM    -> deep amber, evening dim
+                             ... M steps ...   -> keeps warming to night_kelvin,
+                                                  keeps dimming
+                             a few minutes before local 1:00 AM -> last fade
+                                                  point (deepest amber/dimmest)
                              local 1:00 AM     -> off
                            Each one-time schedule deletes itself after firing.
 
@@ -43,15 +46,22 @@ Environment variables (set these on the Lambda, never hard-code secrets here):
                                 unset to control every device the API key
                                 can see.
   START_KELVIN    (optional, default 4300) - color temp at sunset
-  END_KELVIN      (optional, default 2200)  - color temp at 11pm, then holds
+  END_KELVIN      (optional, default 2200)  - color temp at 11pm
+  NIGHT_KELVIN    (optional, default 2000) - color temp at the last fade
+                                point (a few minutes before 1am); the fade
+                                phase keeps warming color temp from END_KELVIN
+                                down to this instead of holding it flat
   START_BRIGHTNESS   (optional, default 60) - brightness % at sunset
   EVENING_BRIGHTNESS (optional, default 30) - brightness % at 11pm
   END_BRIGHTNESS     (optional, default 10) - brightness % just before 1am
                                                shutoff
   STEP_COUNT      (optional, default 6) - number of points between sunset
                                 and 11pm (inclusive of both ends)
-  FADE_STEP_COUNT (optional, default 3) - number of extra dimming points
-                                between 11pm and 1am
+  FADE_STEP_COUNT (optional, default 3) - number of extra warming/dimming
+                                points between 11pm and 1am
+  FADE_END_BUFFER_MIN (optional, default 25) - minutes before 1am that the
+                                last fade point lands, so it doesn't fire
+                                right on top of the 1am off step
   SCHEDULE_GROUP  (optional, default "default") - EventBridge Scheduler group
 """
 
@@ -104,11 +114,13 @@ def plan_tonight(event, context):
     tz = ZoneInfo(os.environ["TIMEZONE"])
     start_k = int(os.environ.get("START_KELVIN", "4300"))
     end_k = int(os.environ.get("END_KELVIN", "2200"))
+    night_k = int(os.environ.get("NIGHT_KELVIN", "2000"))
     start_b = int(os.environ.get("START_BRIGHTNESS", "60"))
     evening_b = int(os.environ.get("EVENING_BRIGHTNESS", "30"))
     end_b = int(os.environ.get("END_BRIGHTNESS", "10"))
     step_count = int(os.environ.get("STEP_COUNT", "6"))
     fade_step_count = int(os.environ.get("FADE_STEP_COUNT", "3"))
+    fade_end_buffer_min = int(os.environ.get("FADE_END_BUFFER_MIN", "25"))
     group = os.environ.get("SCHEDULE_GROUP", "default")
     function_arn = os.environ["FUNCTION_ARN"]
     scheduler_role_arn = os.environ["SCHEDULER_ROLE_ARN"]
@@ -142,16 +154,20 @@ def plan_tonight(event, context):
             "brightness": brightness, "power_mode": power_mode,
         }))
 
-    # Fade: 11pm -> just before 1am. Color temp holds at end_k; brightness
-    # keeps dimming from evening_b down to end_b, right up to shutoff.
-    fade_window_end = one_am_local - timedelta(minutes=1)
+    # Fade: 11pm -> a few minutes before 1am. Color temp keeps warming from
+    # end_k down to night_k (deepest amber), while brightness keeps dimming
+    # from evening_b down to end_b, right up to shutoff. The window ends
+    # fade_end_buffer_min before 1am so the last fade point and the off step
+    # don't land back-to-back.
+    fade_window_end = one_am_local - timedelta(minutes=fade_end_buffer_min)
     fade_span = (fade_window_end - eleven_pm_local) / fade_step_count
     for i in range(1, fade_step_count + 1):
         when = eleven_pm_local + fade_span * i
         frac = i / fade_step_count
+        kelvin = round(end_k + (night_k - end_k) * frac)
         brightness = round(evening_b + (end_b - evening_b) * frac)
         steps.append((when, {
-            "action": "run_step", "power": "on", "colorTemp": end_k,
+            "action": "run_step", "power": "on", "colorTemp": kelvin,
             "brightness": brightness, "power_mode": "skip",
         }))
 

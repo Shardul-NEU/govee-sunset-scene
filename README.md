@@ -88,14 +88,17 @@ Edit `terraform.tfvars`:
   default `cron(0 18 * * ? *)` (18:00 UTC = 12-1pm local depending on
   season/DST) is safe. If you're elsewhere, pick a UTC hour that maps to
   early afternoon local time.
-- `start_kelvin` / `end_kelvin` / `step_count` - tune the warmth curve if
-  you want. Defaults: 4300K (warm white) at sunset down to 2200K (deep
-  amber/candlelight) at 11pm, in 6 steps, then holds until shutoff.
+- `start_kelvin` / `end_kelvin` / `night_kelvin` / `step_count` - tune the
+  warmth curve if you want. Defaults: 4300K (warm white) at sunset down to
+  2200K (deep amber/candlelight) at 11pm, in 6 steps, then keeps warming to
+  2000K (deepest amber) by the last fade point just before the 1am shutoff.
 - `start_brightness` / `evening_brightness` / `end_brightness` - brightness
   percent (1-100) curve. Defaults: 60% at sunset, dimming to 30% by 11pm,
   then continuing to dim to 10% right before the 1am shutoff.
-- `fade_step_count` - number of extra dimming points between 11pm and 1am
-  for that final fade. Default: 3.
+- `fade_step_count` - number of extra warming/dimming points between 11pm
+  and 1am for that final fade. Default: 3.
+- `fade_end_buffer_minutes` - minutes before 1am that the last fade point
+  lands, so it doesn't fire right on top of the 1am off step. Default: 25.
 - `govee_device_filter` - leave blank to control all 8 bulbs. Only set this
   if you later add other Govee devices to the account you don't want this
   automation touching.
@@ -155,10 +158,10 @@ Variables (not sensitive):
 - `GROUP_DEVICE_ID` - your Govee app group's device id (see step 4).
 - `LATITUDE`, `LONGITUDE`, `TIMEZONE`
 - `PLAN_CRON_UTC`
-- `GOVEE_DEVICE_FILTER`, `START_KELVIN`, `END_KELVIN`, `START_BRIGHTNESS`,
-  `EVENING_BRIGHTNESS`, `END_BRIGHTNESS`, `STEP_COUNT`, `FADE_STEP_COUNT`
-  (optional - Terraform falls back to the same defaults as
-  `terraform.tfvars.example`)
+- `GOVEE_DEVICE_FILTER`, `START_KELVIN`, `END_KELVIN`, `NIGHT_KELVIN`,
+  `START_BRIGHTNESS`, `EVENING_BRIGHTNESS`, `END_BRIGHTNESS`, `STEP_COUNT`,
+  `FADE_STEP_COUNT`, `FADE_END_BUFFER_MINUTES` (optional - Terraform falls
+  back to the same defaults as `terraform.tfvars.example`)
 
 You can also run the `terraform` workflow manually from the Actions tab
 (`workflow_dispatch`) without changing any files.
@@ -206,11 +209,12 @@ Scheduler tiers. Expect $0/month.
 
 ## Adjusting later
 
-- Change the warmth curve: edit `start_kelvin` / `end_kelvin` / `step_count`
-  in `terraform.tfvars` (or the matching GitHub variables for CI) and
-  re-apply.
+- Change the warmth curve: edit `start_kelvin` / `end_kelvin` / `night_kelvin`
+  / `step_count` in `terraform.tfvars` (or the matching GitHub variables for
+  CI) and re-apply.
 - Change the brightness curve: edit `start_brightness` / `evening_brightness`
   / `end_brightness` / `fade_step_count` the same way.
+- Change the gap before shutoff: edit `fade_end_buffer_minutes`.
 - Pause it: easiest to toggle the `govee-plan-tonight` schedule off in the
   AWS Console (EventBridge -> Scheduler) rather than changing Terraform.
 - Remove it entirely: `terraform destroy` (from `terraform/`, with the same
