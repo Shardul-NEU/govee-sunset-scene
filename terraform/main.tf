@@ -133,11 +133,13 @@ resource "aws_lambda_function" "govee_sunset_scene" {
       TIMEZONE            = var.timezone
       START_KELVIN        = tostring(var.start_kelvin)
       END_KELVIN          = tostring(var.end_kelvin)
+      NIGHT_KELVIN        = tostring(var.night_kelvin)
       START_BRIGHTNESS    = tostring(var.start_brightness)
       EVENING_BRIGHTNESS  = tostring(var.evening_brightness)
       END_BRIGHTNESS      = tostring(var.end_brightness)
       STEP_COUNT          = tostring(var.step_count)
       FADE_STEP_COUNT     = tostring(var.fade_step_count)
+      FADE_END_BUFFER_MIN = tostring(var.fade_end_buffer_minutes)
       SCHEDULE_GROUP      = var.schedule_group
       SCHEDULER_ROLE_ARN  = aws_iam_role.scheduler.arn
       FUNCTION_ARN        = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.function_name}"

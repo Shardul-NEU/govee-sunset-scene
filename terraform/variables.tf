@@ -43,9 +43,15 @@ variable "start_kelvin" {
 }
 
 variable "end_kelvin" {
-  description = "Color temperature at 11pm local time, then holds until shutoff"
+  description = "Color temperature at 11pm local time"
   type        = number
   default     = 2200
+}
+
+variable "night_kelvin" {
+  description = "Color temperature at the last fade point, a few minutes before the 1am shutoff. The fade phase keeps warming from end_kelvin down to this instead of holding flat."
+  type        = number
+  default     = 2000
 }
 
 variable "start_brightness" {
@@ -67,9 +73,15 @@ variable "end_brightness" {
 }
 
 variable "fade_step_count" {
-  description = "Number of extra dimming points between 11pm and 1am"
+  description = "Number of extra warming/dimming points between 11pm and 1am"
   type        = number
   default     = 3
+}
+
+variable "fade_end_buffer_minutes" {
+  description = "Minutes before 1am that the last fade point lands, so it doesn't fire right on top of the 1am off step"
+  type        = number
+  default     = 10
 }
 
 variable "step_count" {
