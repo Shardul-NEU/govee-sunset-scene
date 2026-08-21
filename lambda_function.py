@@ -22,7 +22,11 @@ EventBridge Scheduler; "list_devices" is for manual/ad-hoc invocation:
                            the real Govee cloud API and applies the
                            requested color temperature (or turns the bulbs
                            off) on every bulb on your account (or a filtered
-                           subset -- see DEVICE_FILTER below).
+                           subset -- see DEVICE_FILTER below). On the two
+                           power-changing steps (sunset-on, 1am-off), it
+                           then queries each bulb's actual power state,
+                           retries once per-bulb on any mismatch, and logs
+                           the final per-bulb status either way.
 
   action = "list_devices" -> returns sku/device id/name for every bulb the
                            API key can see. Handy for figuring out
@@ -246,6 +250,10 @@ def run_step(event, context):
     # "individual" - original per-bulb power behavior (default/fallback).
     power_mode = event.get("power_mode", "individual")
     device_filter = _parse_device_filter(os.environ.get("DEVICE_FILTER", ""))
+    # Only the steps that actually change power ("group"/"individual") get
+    # verified against real device state; "skip" steps only touch
+    # color/brightness on bulbs that are already in the right power state.
+    verify_power = power_mode in ("group", "individual")
 
     results = []
 
@@ -261,6 +269,8 @@ def run_step(event, context):
                     continue
                 results.append(_set_power(api_key, sku, device_id, False))
                 time.sleep(0.2)
+        if verify_power:
+            _verify_and_retry_power(api_key, power, device_filter)
         return {"power": power, "colorTemp": color_temp, "brightness": brightness, "devices_touched": len(results)}
 
     for d in _list_devices(api_key):
@@ -285,6 +295,9 @@ def run_step(event, context):
             clamped = max(rng.get("min", 1), min(rng.get("max", 100), brightness))
             results.append(_set_brightness(api_key, sku, device_id, clamped))
             time.sleep(0.2)
+
+    if verify_power:
+        _verify_and_retry_power(api_key, power, device_filter)
 
     return {"power": power, "colorTemp": color_temp, "brightness": brightness, "devices_touched": len(results)}
 
@@ -323,8 +336,11 @@ def _control(api_key, sku, device_id, capability):
         )
         return {"device": device_id, "ok": True, "response": resp}
     except urllib.error.HTTPError as e:
-        return {"device": device_id, "ok": False, "error": f"{e.code} {e.read().decode('utf-8', 'ignore')}"}
+        error = f"{e.code} {e.read().decode('utf-8', 'ignore')}"
+        print(f"WARNING: control call failed for {device_id} ({capability.get('instance')}): {error}")
+        return {"device": device_id, "ok": False, "error": error}
     except Exception as e:  # noqa: BLE001
+        print(f"WARNING: control call failed for {device_id} ({capability.get('instance')}): {e}")
         return {"device": device_id, "ok": False, "error": str(e)}
 
 
@@ -347,6 +363,65 @@ def _set_brightness(api_key, sku, device_id, percent):
         api_key, sku, device_id,
         {"type": "devices.capabilities.range", "instance": "brightness", "value": percent},
     )
+
+
+def _get_power_state(api_key, sku, device_id):
+    """Query a single bulb's actual current powerSwitch value from Govee
+    (not what we told it to be - what it reports back). Returns True/False,
+    or None if the state couldn't be determined (query failed, or the
+    device didn't report a powerSwitch capability)."""
+    body = {
+        "requestId": str(uuid.uuid4()),
+        "payload": {"sku": sku, "device": device_id},
+    }
+    try:
+        resp = _http_json(
+            "POST",
+            f"{GOVEE_BASE}/router/api/v1/device/state",
+            headers={"Govee-API-Key": api_key},
+            body=body,
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING: state query failed for {device_id}: {e}")
+        return None
+    for cap in resp.get("payload", {}).get("capabilities", []):
+        if cap.get("instance") == "powerSwitch":
+            return cap.get("state", {}).get("value") == 1
+    return None
+
+
+def _verify_and_retry_power(api_key, power, device_filter):
+    """Called after a power on/off step. A "group" call is a single API
+    call that Govee's cloud fans out to every bulb on its own - we get no
+    per-bulb confirmation from that call, so a bulb can silently fail to
+    receive it (this is what caused one bulb to stay on after a 1am group
+    "off" - see 2026-08-21 incident). Query each real bulb's actual
+    powerSwitch state, retry once (directly, per-bulb) on any mismatch,
+    then log the final per-bulb status either way so this is visible in
+    CloudWatch instead of silently swallowed.
+    """
+    bulbs = [
+        (d["sku"], d["device"])
+        for d in _list_devices(api_key)
+        if d["sku"] != GROUP_SKU and (not device_filter or (d["sku"], d["device"]) in device_filter)
+    ]
+    desired_on = power == "on"
+
+    statuses = {device_id: _get_power_state(api_key, sku, device_id) for sku, device_id in bulbs}
+    mismatched = [(sku, device_id) for sku, device_id in bulbs if statuses[device_id] != desired_on]
+
+    if mismatched:
+        print(f"WARNING: {len(mismatched)} device(s) not '{power}' after step, retrying once: "
+              f"{[device_id for _, device_id in mismatched]}")
+        for sku, device_id in mismatched:
+            _set_power(api_key, sku, device_id, desired_on)
+            time.sleep(0.2)
+        for sku, device_id in mismatched:
+            statuses[device_id] = _get_power_state(api_key, sku, device_id)
+            if statuses[device_id] != desired_on:
+                print(f"ERROR: device {device_id} still not '{power}' after retry")
+
+    print(f"post-step power status (desired={power}): {statuses}")
 
 
 # --------------------------------------------------------------------------
