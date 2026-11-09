@@ -31,7 +31,7 @@ data "aws_iam_policy_document" "scheduler_permissions" {
   statement {
     effect    = "Allow"
     actions   = ["lambda:InvokeFunction"]
-    resources = [aws_lambda_function.govee_sunset_scene.arn]
+    resources = ["arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.function_name}"]
   }
 }
 
@@ -106,65 +106,6 @@ resource "aws_iam_role_policy" "lambda" {
 }
 
 # ---------------------------------------------------------------------------
-# Lambda function
+# The Lambda function and the recurring plan_tonight schedule were removed
+# to stop the automation entirely. Revert this commit to restore them.
 # ---------------------------------------------------------------------------
-data "archive_file" "lambda" {
-  type        = "zip"
-  source_file = "${path.module}/../lambda_function.py"
-  output_path = "${path.module}/.build/function.zip"
-}
-
-resource "aws_lambda_function" "govee_sunset_scene" {
-  function_name    = local.function_name
-  role             = aws_iam_role.lambda.arn
-  handler          = "lambda_function.handler"
-  runtime          = "python3.12"
-  timeout          = 30
-  filename         = data.archive_file.lambda.output_path
-  source_code_hash = data.archive_file.lambda.output_base64sha256
-
-  environment {
-    variables = {
-      GOVEE_API_KEY       = var.govee_api_key
-      GOVEE_DEVICE_FILTER = var.govee_device_filter
-      GROUP_DEVICE_ID     = var.group_device_id
-      LATITUDE            = var.latitude
-      LONGITUDE           = var.longitude
-      TIMEZONE            = var.timezone
-      START_KELVIN        = tostring(var.start_kelvin)
-      END_KELVIN          = tostring(var.end_kelvin)
-      NIGHT_KELVIN        = tostring(var.night_kelvin)
-      START_BRIGHTNESS    = tostring(var.start_brightness)
-      EVENING_BRIGHTNESS  = tostring(var.evening_brightness)
-      END_BRIGHTNESS      = tostring(var.end_brightness)
-      STEP_COUNT          = tostring(var.step_count)
-      FADE_STEP_COUNT     = tostring(var.fade_step_count)
-      FADE_END_BUFFER_MIN = tostring(var.fade_end_buffer_minutes)
-      SCHEDULE_GROUP      = var.schedule_group
-      SCHEDULER_ROLE_ARN  = aws_iam_role.scheduler.arn
-      FUNCTION_ARN        = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${local.function_name}"
-    }
-  }
-}
-
-# ---------------------------------------------------------------------------
-# Recurring daily schedule that plans tonight's steps
-# ---------------------------------------------------------------------------
-resource "aws_scheduler_schedule" "plan_tonight" {
-  name       = local.plan_schedule_name
-  group_name = var.schedule_group
-  state      = "DISABLED"
-
-  schedule_expression          = var.plan_cron_utc
-  schedule_expression_timezone = "UTC"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.govee_sunset_scene.arn
-    role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode({ action = "plan" })
-  }
-}
