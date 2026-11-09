@@ -153,6 +153,7 @@ resource "aws_lambda_function" "govee_sunset_scene" {
 resource "aws_scheduler_schedule" "plan_tonight" {
   name       = local.plan_schedule_name
   group_name = var.schedule_group
+  state      = "DISABLED"
 
   schedule_expression          = var.plan_cron_utc
   schedule_expression_timezone = "UTC"
